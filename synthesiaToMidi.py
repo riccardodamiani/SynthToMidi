@@ -2,10 +2,11 @@ import cv2
 import midi_helper
 from midi_helper import play_note, create_new_track, init_midi, save_midi, midi_note_to_notation
 import color_helper
-from color_helper import get_hue, are_same_hue, get_saturation, get_brightness, is_key_color
+from color_helper import get_hue, are_same_hue, get_saturation, get_brightness, is_key_color, colorfulness
 import os
 import time
 import argparse
+import numpy as np
 
 key_list = []
 keys_color = []
@@ -226,19 +227,23 @@ def find_track_by_color(color):
         index += 1
     return -1
 
-def main():
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument("filename", help="Input video filename", type=str)
-    parser.add_argument("-v", "--volume", help="Change the midi note velocity (0-127)", type=int, default=64)
+def print_debug_text(frame, text, position, size):
+    # Disegna il bordo del testo
+    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, size, (255, 255, 255), thickness=2 + 2, lineType=cv2.LINE_AA)
 
-    # Parse the arguments
-    args = parser.parse_args()
+    # Disegna il testo sopra il bordo
+    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, size, (0, 0, 0), thickness=2, lineType=cv2.LINE_AA)
 
-    filename = args.filename
+def process(filename, args):
+    global key_list, keys_color, music_tracks_color
+    key_list = []
+    keys_color = []
+    music_tracks_color = []
+
     midi_filename = os.path.splitext(filename)[0] + '.mid'
-
+    debug_video_filename = "debug.mp4"
     default_note_volume = args.volume
-
+    
     # some variables
     beatsPerMinute = 60
 
@@ -248,6 +253,15 @@ def main():
 
     # load the video
     cap = cv2.VideoCapture(filename)
+    #open a debug video
+    if args.debug:
+        # Ottieni la risoluzione e il frame rate dal video originale
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        # Codec e creazione del VideoWriter
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(debug_video_filename, fourcc, fps, (frame_width, frame_height))
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -255,10 +269,12 @@ def main():
             break
 
         current_time = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        print(f"Current time: {current_time}")
+        #print(f"Current time: {current_time}")
 
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         _, binary_frame = cv2.threshold(gray_frame, 127, 255, cv2.THRESH_BINARY)
+        if args.debug:
+            debug_frame = np.copy(frame)
 
         #wait for the image to be bright enough and than search the keys
         if(not valid_keyboard):
@@ -273,7 +289,7 @@ def main():
                     keyboard_check_timer = time.time()
                     print(key_list)
         
-        # check whether there is a valid keyboard on screen
+        # every second check whether there is a valid keyboard on screen and recalculate the key color
         if time.time() - keyboard_check_timer > 1.0:
             keyboard_check_timer = time.time()
             if(not is_keyboard_present(gray_frame)):
@@ -286,12 +302,15 @@ def main():
         #checks whether a key was pressed or released
         for old_color, new_color, key in zip(keys_color, new_keys_color, key_list):
             # the key is not pressed
-            #print(midi_note_to_notation(key["note"]))
-            if is_key_color(new_color):
+            #print(np.linalg.norm(np.array(new_color) - np.array(default_white_key_color)))
+            colorfulness_value = colorfulness(new_color)
+            if args.debug and colorfulness_value > 0.01:
+                print_debug_text(debug_frame, str(colorfulness_value)[:3] if colorfulness_value>=0.1 else str(colorfulness_value)[1:4], (key["rect"][0], frame_height-10-10*(key["note"]%3)), 0.4)
+            if colorfulness_value <= args.color_insensitivity:
                 if key["is_pressed"]: #the key was pressed
                     key["is_pressed"] = False
                     track_index = find_track_by_color(old_color)
-                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " unpressed")
+                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " released")
                     play_note(track_index, 'note_off', note=key["note"], velocity=default_note_volume, time=current_time)
             else: #the key is pressed
                 #the key was not pressed
@@ -304,41 +323,67 @@ def main():
                         track_index = create_new_track()
                         music_tracks_color.append(new_color)
                     
+                    if args.debug:
+                        print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6)
                     print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " pressed")
-                    print(f"lum: {get_brightness(new_color)}, sat {get_saturation(new_color)}")
+                    #print(f"lum: {get_brightness(new_color)}, sat {get_saturation(new_color)}")
                     play_note(track_index, 'note_on', note=key["note"], velocity=default_note_volume, time=current_time)
-
-                #the key was pressed
+                #if the key was pressed by another color (another voice) or if the color became more intense 
+                # (multiple presses of same key) replay the same key
                 elif not are_same_hue(old_color, new_color, hue_threshold):
-                    #if the color changed from before the key was pressed in another track
-                    #release the key in the old track
+                    #release the key
                     track_index = find_track_by_color(old_color)
-                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " unpressed")
+                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " released")
                     play_note(track_index, 'note_off', note=key["note"], velocity=default_note_volume, time=current_time)
 
-                    # press the key in the new track
+                    # press the key again
                     track_index = find_track_by_color(new_color)
                     if track_index == -1:
                         print("Created new track")
                         track_index = create_new_track()
                         music_tracks_color.append(new_color)
                     
+                    if args.debug:
+                        print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6)
                     print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " pressed")
-                    print(f"hues - old color: {get_hue(old_color)}, new color {new_color}")
+                    #print(f"hues - old color: {get_hue(old_color)}, new color {new_color}")
                     play_note(track_index, 'note_on', note=key["note"], velocity=default_note_volume, time=current_time)
-
+                elif args.debug:
+                    print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6)
         keys_color = new_keys_color
 
         #cv2.imshow('frame', frame)
         #cv2.waitKey(0)
+        if args.debug:
+            out.write(debug_frame)  # Salva il frame nel video
 
     # save the midi file
     save_midi(midi_filename)
     print(f"Saved as {midi_filename}")
 
     cap.release()
+    if args.debug:
+        out.release()
     cv2.destroyAllWindows()
 
+def main():
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("filename", help="Input video filename", type=str)
+    parser.add_argument("-v", "--volume", help="Change the midi note velocity (0-127)", type=int, default=64)
+    parser.add_argument("-c", "--color_insensitivity", help="Change how sensitive it is to keys color. The lower the more sensitive it is to difference from the default key color (white/black)", type=float, default=0.07)
+    parser.add_argument("-d", "--debug", help="Create an output mp4 file for debugging", action="store_true")
+
+    # Parse the arguments
+    args = parser.parse_args()
+
+    if os.path.isdir(args.filename):
+        directory = args.filename
+        for filename in os.listdir(args.filename):
+            file_path = os.path.join(directory, filename)
+            if os.path.isfile(file_path):  # Controlla se è un file (esclude le cartelle)
+                process(file_path, args)
+    elif os.path.isfile(args.filename):
+        process(args.filename, args)
 
 if __name__ == "__main__":
     main()

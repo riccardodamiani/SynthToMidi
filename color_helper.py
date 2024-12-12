@@ -1,4 +1,6 @@
 import colorsys
+import numpy as np
+import cv2
 
 # return the hue of a color
 def get_hue(color):
@@ -22,6 +24,47 @@ def are_same_hue(color1, color2, hue_threshold):
     
     # Check if the hue difference is within the tolerance
     return diff <= hue_threshold
+
+#return a value rapresenting the color type
+# 0 means close to black
+# 255 means close to white
+# near 127 means colorful
+def color_descriptor(rgb_color):
+    # Convert RGB to HSV
+    r, g, b = rgb_color
+    rgb_array = np.uint8([[rgb_color]])  # Convert to array for OpenCV
+    hsv_color = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2HSV)[0][0]
+
+    # Extract components
+    hue, saturation, value = hsv_color
+
+    # Calculate luminosity (perceptual luminance)
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+    # Combine luminance and saturation to calculate the descriptor
+    descriptor = (luminance * 0.7 + saturation * 0.3)
+
+    return descriptor
+
+def colorfulness(color):
+    r, g, b = color
+
+    #rescale the channels between 0 and 1
+    delta_r, delta_b, delta_g = r / 255, b /255, g / 255
+    #calculates the difference between each channels
+    delta_rb, delta_rg, delta_bg = abs(delta_r-delta_b), abs(delta_r-delta_g), abs(delta_b-delta_g)
+    #amplify the difference between channels deltas (the more different 2 channels are the more it is colorful)
+    delta_rb = delta_rb*delta_rb
+    delta_rg = delta_rg*delta_rg
+    delta_bg = delta_bg*delta_bg
+    #sum the channles pair deltas
+    color_difference = delta_rb + delta_rg + delta_bg
+
+    #calculate a value that is higher the more it is far from black and white
+    lum = r + b + g
+    bw_corrector = min(765-lum, lum) / 120
+    
+    return color_difference * bw_corrector
 
 
 # returns the saturation of a color

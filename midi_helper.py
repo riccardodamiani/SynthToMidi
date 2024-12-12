@@ -45,7 +45,8 @@ def create_new_track():
     return track_index
 
 def init_midi(beatsPerMinute):
-    global ticksPerSecond, ticksPerBeat, track_tempo, midiFile
+    global ticksPerSecond, ticksPerBeat, track_tempo, midiFile, midi_tracks
+    midi_tracks = []
     ticksPerSecond = (beatsPerMinute / 60) * ticksPerBeat
     track_tempo = int(60 * 1_000_000 / beatsPerMinute)  # Convert beats per second to microseconds per beat
 
