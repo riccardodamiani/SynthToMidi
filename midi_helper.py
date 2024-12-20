@@ -19,11 +19,14 @@ def play_note(track_index, msg, note, velocity, time):
     if not track_exists(track_index):
         return False
     
-    time = time * ticksPerSecond
+    time = int(time * ticksPerSecond)
     last_message_time = midi_tracks[track_index]["last_msg_time"]
     midi_tracks[track_index]["last_msg_time"] = time
 
+    #print(f"track time: { midi_tracks[track_index]['total_time']}")
     msg_time = time - last_message_time
+    midi_tracks[track_index]["total_time"] += msg_time
+
     midi_tracks[track_index]["track"].append(Message(msg, note=note, velocity=velocity, time=int(msg_time)))
     return True
 
@@ -39,7 +42,7 @@ def create_new_track():
 
     track_index = len(midi_tracks)
     track = MidiTrack()
-    midi_tracks.append({"track": track, "last_msg_time": 0})
+    midi_tracks.append({"track": track, "last_msg_time": 0, "total_time": 0})
     track.append(MetaMessage('set_tempo', tempo=track_tempo))
     midiFile.tracks.append(track)
     return track_index
