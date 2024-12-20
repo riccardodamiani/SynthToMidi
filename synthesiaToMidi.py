@@ -227,12 +227,12 @@ def find_track_by_color(color):
         index += 1
     return -1
 
-def print_debug_text(frame, text, position, size):
+def print_debug_text(frame, text, position, size, color=(255, 255, 255)):
     # Disegna il bordo del testo
-    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, size, (255, 255, 255), thickness=2 + 2, lineType=cv2.LINE_AA)
+    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, size, (0, 0, 0), thickness=2 + 2, lineType=cv2.LINE_AA)
 
     # Disegna il testo sopra il bordo
-    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, size, (0, 0, 0), thickness=2, lineType=cv2.LINE_AA)
+    cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, size, color, thickness=2, lineType=cv2.LINE_AA)
 
 def process(filename, args):
     global key_list, keys_color, music_tracks_color
@@ -310,7 +310,7 @@ def process(filename, args):
                 if key["is_pressed"]: #the key was pressed
                     key["is_pressed"] = False
                     track_index = find_track_by_color(old_color)
-                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " released")
+                    print(str(current_time) + " - " + "Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " released")
                     play_note(track_index, 'note_off', note=key["note"], velocity=default_note_volume, time=current_time)
             else: #the key is pressed
                 #the key was not pressed
@@ -324,8 +324,8 @@ def process(filename, args):
                         music_tracks_color.append(new_color)
                     
                     if args.debug:
-                        print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6)
-                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " pressed")
+                        print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6, color=new_color)
+                    print(str(current_time) + " - " "Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " pressed")
                     #print(f"lum: {get_brightness(new_color)}, sat {get_saturation(new_color)}")
                     play_note(track_index, 'note_on', note=key["note"], velocity=default_note_volume, time=current_time)
                 #if the key was pressed by another color (another voice) or if the color became more intense 
@@ -333,7 +333,7 @@ def process(filename, args):
                 elif not are_same_hue(old_color, new_color, hue_threshold):
                     #release the key
                     track_index = find_track_by_color(old_color)
-                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " released")
+                    print(str(current_time) + " - " "Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " released")
                     play_note(track_index, 'note_off', note=key["note"], velocity=default_note_volume, time=current_time)
 
                     # press the key again
@@ -344,17 +344,18 @@ def process(filename, args):
                         music_tracks_color.append(new_color)
                     
                     if args.debug:
-                        print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6)
-                    print("Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " pressed")
+                        print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6, color=new_color)
+                    print(str(current_time) + " - " "Key " + midi_note_to_notation(key["note"]) + f" ({str(key['note'])}) " + " pressed")
                     #print(f"hues - old color: {get_hue(old_color)}, new color {new_color}")
                     play_note(track_index, 'note_on', note=key["note"], velocity=default_note_volume, time=current_time)
                 elif args.debug:
-                    print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6)
+                    print_debug_text(debug_frame, midi_note_to_notation(key["note"]), (key["rect"][0], key["rect"][1]), 0.6, color=new_color)
         keys_color = new_keys_color
 
         #cv2.imshow('frame', frame)
         #cv2.waitKey(0)
         if args.debug:
+            cv2.putText(debug_frame, str(current_time)[:6], (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), thickness=2 + 2, lineType=cv2.LINE_AA)
             out.write(debug_frame)  # Salva il frame nel video
 
     # save the midi file
