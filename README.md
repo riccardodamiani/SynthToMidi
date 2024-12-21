@@ -4,8 +4,8 @@ Small python script that create a MIDI file from a synthesia video. Once you hav
 The script analyze the frames of the video (no audio involved) and detects the change in color in the virtual keyboard keys. It than convert the color changes into midi messages (note on and note off) that are stored into a file. The script can distinguish between different colors of the keys and separate the notes automatically into different tracks.  
 This is a one day project so it's still bare bone as for graphics, error handling ecc...  
 Also, there are some problems that needs to be fixed such as:
-* tracks desyncronization
 * issues in detecting the notes when there are graphical effects on the video (for example the glow of light when the note hit the key in newer synthesia videos)
+* incorrectly identify notes in some videos
 
 ## Requirements  
 Python3 and a few pip packages: opencv-python, mido
